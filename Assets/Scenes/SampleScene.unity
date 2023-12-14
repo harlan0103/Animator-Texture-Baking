@@ -411,6 +411,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   animator: {fileID: 1200264965}
+  computeShader: {fileID: 7200000, guid: cc8330ac69ae01e46836093d740fab9e, type: 3}
+  debug_vertexInfoArray: []
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

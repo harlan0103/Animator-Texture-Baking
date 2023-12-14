@@ -1,9 +1,26 @@
 using System.Collections;
+using System.Runtime.CompilerServices;
 using UnityEngine;
+
+[System.Serializable]
+public struct VertexInfo
+{
+    public Vector3 position;
+    public Vector3 normal;
+}
+
+public enum KERNELS
+{
+    GenerateVertexInfoArray = 0
+}
 
 public class AnimatorTexBaker : MonoBehaviour
 {
     public Animator animator;
+    public ComputeShader computeShader;
+
+    // Debug
+    public VertexInfo[] debug_vertexInfoArray;
 
     private Vector3 positionOffset = new Vector3(1.5f, 0.0f, 0.0f);
 
@@ -25,11 +42,12 @@ public class AnimatorTexBaker : MonoBehaviour
             int vertexCnt = skinnedMeshRenderer.sharedMesh.vertexCount;
             int textureWidth = Mathf.NextPowerOfTwo(vertexCnt);
 
+            Debug.Log("Number of vertices: " + vertexCnt);
+
             foreach (AnimationClip clip in animationClips)
             {
                 Debug.Log("Animation clip name: " + clip.name);
                 Debug.Log("Animation clip length: " + clip.length);
-                Debug.Log("Animation clip frame rate: " + clip.frameRate);
                 Debug.Log("Animation frame number: " + (int)clip.length / clip.frameRate);
 
                 // To prevent data lose useing next power of 2 valueo of actual frame numbers here
@@ -37,7 +55,7 @@ public class AnimatorTexBaker : MonoBehaviour
                 Debug.Log("Frame number is: " + frameNumber);
 
                 // Bake a mesh in each frame
-                for (int i = 0; i < frameNumber; i++)
+                for (int i = 0; i < 1; i++)
                 {
                     animator.Play(clip.name, 0, (float)i / frameNumber);
                     yield return new WaitForEndOfFrame();
@@ -52,6 +70,34 @@ public class AnimatorTexBaker : MonoBehaviour
                     meshFilter.mesh = bakedMesh;
                     newGameObject.GetComponent<MeshRenderer>().material = skinnedMeshRenderer.material;
                     newGameObject.transform.position = new Vector3(0.0f, 0.0f, 0.0f) + positionOffset * i;
+
+                    // Store vertex position into an array in each frame
+                    // Use Compute Shader to accelerate
+                    ComputeBuffer positionBuffer = new ComputeBuffer(textureWidth, sizeof(float) * 3);
+                    ComputeBuffer normalBuffer = new ComputeBuffer(textureWidth, sizeof(float) * 3);
+                    ComputeBuffer vertexInfoBuffer = new ComputeBuffer(textureWidth, sizeof(float) * 6);
+
+                    positionBuffer.SetData(bakedMesh.vertices);
+                    normalBuffer.SetData(bakedMesh.normals);
+
+                    // Set buffers and properties
+                    computeShader.SetBuffer((int)KERNELS.GenerateVertexInfoArray, "_PositionBuffer", positionBuffer);
+                    computeShader.SetBuffer((int)KERNELS.GenerateVertexInfoArray, "_NormalBuffer", normalBuffer);
+                    computeShader.SetBuffer((int)KERNELS.GenerateVertexInfoArray, "_VertexInfoBuffer", vertexInfoBuffer);
+                    computeShader.SetInt("_VertexCnt", vertexCnt);
+
+                    computeShader.Dispatch((int)KERNELS.GenerateVertexInfoArray, Mathf.CeilToInt(textureWidth / 8), 1, 1);
+
+                    VertexInfo[] vertexInfoArrayTemp = new VertexInfo[textureWidth];
+                    vertexInfoBuffer.GetData(vertexInfoArrayTemp);
+
+                    // ==== Debug ====
+                    debug_vertexInfoArray = vertexInfoArrayTemp;
+
+                    // Release compute buffer after using
+                    positionBuffer.Release();
+                    normalBuffer.Release();
+                    vertexInfoBuffer.Release();
                 }
             }
         }

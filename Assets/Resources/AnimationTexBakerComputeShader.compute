@@ -1,0 +1,38 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel GenerateVertexInfoArray
+
+// Struct
+struct VertexInfo
+{
+    float3 position;
+    float3 normal;
+};
+
+// Buffers
+RWStructuredBuffer<VertexInfo> _VertexInfoBuffer;
+RWStructuredBuffer<float3> _PositionBuffer;
+RWStructuredBuffer<float3> _NormalBuffer;
+
+// Properties
+uint _VertexCnt;
+
+[numthreads(8, 1, 1)]
+void GenerateVertexInfoArray(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _VertexCnt)
+    {
+        VertexInfo newInfo;
+        newInfo.position = _PositionBuffer[id.x];
+        newInfo.normal = _NormalBuffer[id.x];
+    
+        _VertexInfoBuffer[id.x] = newInfo;
+    }
+    else
+    {
+        VertexInfo newInfo;
+        newInfo.position = float3(0.0f, 0.0f, 0.0f);
+        newInfo.normal = float3(0.0f, 0.0f, 0.0f);
+    
+        _VertexInfoBuffer[id.x] = newInfo;
+    }
+}
