@@ -1,5 +1,5 @@
+using System;
 using System.Collections;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 
 [System.Serializable]
@@ -11,7 +11,8 @@ public struct VertexInfo
 
 public enum KERNELS
 {
-    GenerateVertexInfoArray = 0
+    GenerateVertexInfoArray = 0,
+    TextureGeneration = 1
 }
 
 public class AnimatorTexBaker : MonoBehaviour
@@ -19,8 +20,10 @@ public class AnimatorTexBaker : MonoBehaviour
     public Animator animator;
     public ComputeShader computeShader;
 
+    public RenderTexture renderTex;
+
     // Debug
-    public VertexInfo[] debug_vertexInfoArray;
+    //public VertexInfo[] debug_vertexInfoArray;
 
     private Vector3 positionOffset = new Vector3(1.5f, 0.0f, 0.0f);
 
@@ -54,8 +57,17 @@ public class AnimatorTexBaker : MonoBehaviour
                 int frameNumber = Mathf.NextPowerOfTwo((int)(clip.length / (1.0f / clip.frameRate)));
                 Debug.Log("Frame number is: " + frameNumber);
 
+                // Create an array to store all vertex info
+                VertexInfo[] vertexInfoArray = new VertexInfo[textureWidth * frameNumber];
+
+                // Create a new render texture for using
+                RenderTexture positionTex = new RenderTexture(textureWidth, frameNumber, 0, RenderTextureFormat.ARGBHalf);
+                positionTex.enableRandomWrite = true;
+                positionTex.Create();
+
                 // Bake a mesh in each frame
-                for (int i = 0; i < 1; i++)
+                int startIdx = 0;
+                for (int i = 0; i < frameNumber; i++)
                 {
                     animator.Play(clip.name, 0, (float)i / frameNumber);
                     yield return new WaitForEndOfFrame();
@@ -91,14 +103,37 @@ public class AnimatorTexBaker : MonoBehaviour
                     VertexInfo[] vertexInfoArrayTemp = new VertexInfo[textureWidth];
                     vertexInfoBuffer.GetData(vertexInfoArrayTemp);
 
+                    // Add this vertexInfo group into the large array
+                    Array.Copy(vertexInfoArrayTemp, 0, vertexInfoArray, startIdx, vertexInfoArrayTemp.Length);
+                    startIdx += vertexInfoArrayTemp.Length;
+
                     // ==== Debug ====
-                    debug_vertexInfoArray = vertexInfoArrayTemp;
+                    //debug_vertexInfoArray = vertexInfoArrayTemp;
 
                     // Release compute buffer after using
                     positionBuffer.Release();
                     normalBuffer.Release();
                     vertexInfoBuffer.Release();
                 }
+
+                // After get all vertex information of current skinned mesh renderer with current animation clip
+                // Send data to Compute Shader to generate render textures
+                // Each render texture has dimension (vertexCnt X frameNumbers)
+                // The x-axis is the differen vertices
+                // where as y-axis is the vertex position changes in different frames
+                ComputeBuffer vertexInfoArrayBuffer = new ComputeBuffer(textureWidth * frameNumber, sizeof(float) * 6);
+                vertexInfoArrayBuffer.SetData(vertexInfoArray);
+
+                // Set compute buffer and property value for kernel in compute shader
+                computeShader.SetBuffer((int)KERNELS.TextureGeneration, "_VertexInfoBuffer", vertexInfoArrayBuffer);
+                computeShader.SetTexture((int)KERNELS.TextureGeneration, "_PositionTex", positionTex);
+                computeShader.SetInt("_TexWidth", textureWidth);
+                computeShader.Dispatch((int)KERNELS.TextureGeneration, Mathf.CeilToInt(textureWidth / 8), Mathf.CeilToInt(frameNumber / 8), 1);
+
+                vertexInfoArrayBuffer.Release();
+
+                renderTex = positionTex;
+                Debug.Log("================ DONE ================");
             }
         }
     }

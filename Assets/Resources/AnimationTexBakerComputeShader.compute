@@ -1,5 +1,6 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel GenerateVertexInfoArray
+#pragma kernel TextureGeneration
 
 // Struct
 struct VertexInfo
@@ -13,8 +14,11 @@ RWStructuredBuffer<VertexInfo> _VertexInfoBuffer;
 RWStructuredBuffer<float3> _PositionBuffer;
 RWStructuredBuffer<float3> _NormalBuffer;
 
+RWTexture2D<float4> _PositionTex;
+
 // Properties
 uint _VertexCnt;
+uint _TexWidth;
 
 [numthreads(8, 1, 1)]
 void GenerateVertexInfoArray(uint3 id : SV_DispatchThreadID)
@@ -35,4 +39,13 @@ void GenerateVertexInfoArray(uint3 id : SV_DispatchThreadID)
     
         _VertexInfoBuffer[id.x] = newInfo;
     }
+}
+
+[numthreads(8, 8, 1)]
+void TextureGeneration(uint3 id : SV_DispatchThreadID)
+{
+    uint idx = id.x + id.y * _TexWidth;
+    VertexInfo vertexInfo = _VertexInfoBuffer[idx];
+    
+    _PositionTex[id.xy] = float4(vertexInfo.position, 1.0f);
 }
